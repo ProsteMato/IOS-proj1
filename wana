@@ -1,0 +1,245 @@
+#!/bin/sh
+
+export POSIXLY_CORREC=yes
+
+FILTER_A=0
+FILTER_B=0
+FILTER_IP=0
+FILTER_URI=0
+
+FILTER_A_DATE=""
+FILTER_B_DATE=""
+FILTER_IP_ADRESS=""
+FILTER_URI_ADRESS=""
+
+PRIKAZ=""
+
+DATE_FORMAT='^[0-9]{4}-[0-1][0-9]-[0-3][0-9] [0-2][0-9]:[0-6][0-9]:[0-6][0-9]$'
+
+check_date_format(){
+	if ! echo "$1" | grep -E "$DATE_FORMAT" >> /dev/null; then
+		error_message "Not valid date!"
+	fi
+}
+
+
+error_message(){
+	echo "$1">&2
+	exit 1
+}
+
+
+filterA(){
+if [ $FILTER_A -eq 1 ]; then
+	cat | while read -r line
+	do
+	   export line
+	   printf "%s\n" "$line" | sed -e 's/Jan/01/g' -e 's/Feb/02/g' -e 's/Mar/03/g' -e 's/Apr/04/g' -e 's/May/05/g' \
+	   -e  's/Jun/06/g' -e  's/Jul/07/g' -e  's/Aug/08/g' -e  's/Sep/09/g' -e  's/Oct/10/g' -e  's/Nov/11/g' -e 's/Dec/12/g' | \
+		sed -r 's,\[([0-3][0-9])/([0-1][0-9])/([0-9]{4}):([0-2][0-9]):([0-6][0-9]):([0-6][0-9]),\3\2\1\4\5\6,g' | \
+		awk -v date="$FILTER_A_DATE" '{
+			if(date < $4){
+		   	 	print ENVIRON["line"]
+			}
+		}'
+	done
+else 
+	cat
+fi
+}
+
+filterB(){
+	if [ $FILTER_B -eq 1 ]; then
+	cat | while read -r line
+	do
+	   export line
+	   printf "%s\n" "$line" | sed -e 's/Jan/01/g' -e 's/Feb/02/g' -e 's/Mar/03/g' -e 's/Apr/04/g' -e 's/May/05/g' \
+	   -e  's/Jun/06/g' -e  's/Jul/07/g' -e  's/Aug/08/g' -e  's/Sep/09/g' -e  's/Oct/10/g' -e  's/Nov/11/g' -e 's/Dec/12/g' | \
+		sed -r 's,\[([0-3][0-9])/([0-1][0-9])/([0-9]{4}):([0-2][0-9]):([0-6][0-9]):([0-6][0-9]),\3\2\1\4\5\6,g' | \
+		awk -v date="$FILTER_B_DATE" '{
+			if(date > $4){
+		   	 	print ENVIRON["line"]
+			}
+		}' 
+	done
+	else
+		cat 
+	fi
+}
+
+filterURI(){
+	if [ $FILTER_URI -eq 1 ]; then
+		cat | \
+			awk -v URI="$FILTER_URI_ADRESS" '{
+      		if(match($7, URI)){
+        		print $0
+     	 	}	
+		}' 2>/dev/null
+	else
+		cat
+	fi
+}
+
+filterIP(){
+	if [ $FILTER_IP -eq 1 ]; then
+		cat | \
+			awk -v IP="$FILTER_IP_ADRESS" '{
+				if(IP == $1){
+					print $0
+				}
+			}'
+	else
+		cat
+	fi
+}
+
+commant_list_ip(){
+	if [ "$PRIKAZ" = "list-ip" ]; then
+ 		cat | awk '{print $1}' | sort -u 
+	else
+		cat
+	fi
+}
+
+commant_list_uri(){
+	if [ "$PRIKAZ" = "list-uri" ]; then
+  		cat | \
+    	awk '{
+      		if($6 !~ /\"-\"/){
+        		print $7
+      		}
+    	}' | sort -u
+    else cat
+	fi
+}
+
+commant_list_hosts(){
+	if [ "$PRIKAZ" = "list-hosts" ]; then
+  		cat | \
+    awk '{
+        print $1
+    }' | sort -u | \
+    while read -r line; do 
+        if ! DOMAIN=$(host "$line"); then
+          printf "%s\n" "$line"
+        else
+          printf "%s\n" "$DOMAIN" | awk '{ print $5 }'
+        fi
+    done
+	else 
+		cat
+	fi
+}
+
+commant_hist_ip(){
+	if [ "$PRIKAZ" = "hist-ip" ]; then
+  	cat | \
+    	awk '{
+        	print $1
+   		}' | sort | uniq -c | sort -r | \
+    	awk -v hashtag="" '{ 
+      	for(i = 0; i < $1; i++){
+       	 	hashtag=hashtag"#"
+      	}
+     	 printf "%s (%d): %s\n", $2, $1, hashtag
+      	hashtag=""
+    	}'
+  	else
+  	cat
+	fi
+}
+
+commant_hist_load(){
+	if [ "$PRIKAZ" = "hist-load" ]; then
+	  cat | \
+	    awk '{
+		print $4 
+	    }' | sed -e 's/Jan/01/g' -e 's/Feb/02/g' -e 's/Mar/03/g' -e 's/Apr/04/g' -e 's/May/05/g' \
+	     -e  's/Jun/06/g' -e  's/Jul/07/g' -e  's/Aug/08/g' -e  's/Sep/09/g' -e  's/Oct/10/g' -e  's/Nov/11/g' -e 's/Dec/12/g' | \
+	      sed -r 's,\[([0-3][0-9])/([0-1][0-9])/([0-9]{4}):([0-2][0-9]):([0-6][0-9]):([0-6][0-9]),\3-\2-\1 \4,' | sort | uniq -c | \
+	      awk '{
+				for(i = 0; i < $1; i++){
+		 			 hashtag=hashtag"#"
+				}
+			printf "%s %s:00 (%d): %s\n", $2, $3, $1, hashtag
+			hashtag=""
+	      }'
+	else 
+		cat
+	fi
+}
+filters(){
+	cat | filterA | filterB | filterURI | filterIP | commant_hist_load | commant_hist_ip | commant_list_hosts | commant_list_uri | commant_list_ip
+	exit 0
+}
+
+
+
+#osetrit ak na vstupe bude viacej prikazov alebo filtrov... 
+while [ $# -ne 0 ]; do
+	case $1 in
+		-a) 
+			if [ -z "$2" ] || [ ! $FILTER_A -eq 0 ]; then
+				error_message "You need second argument in -a DATETIME or you use argument twice!"
+			else 
+				check_date_format "$2"; FILTER_A=1; FILTER_A_DATE="$2"
+				FILTER_A_DATE=$(echo "$FILTER_A_DATE" | sed -e's/-//g' -e 's/ //g' -e 's/://g')
+				shift 2
+			fi
+			;;
+		-b) 
+			if [ -z "$2" ] || [ ! $FILTER_B -eq 0 ]; then
+				error_message "You need second argument in -b DATETIME or you use argument twice!"
+			else 
+				check_date_format "$2"; FILTER_B=1; FILTER_B_DATE="$2"
+				FILTER_B_DATE=$(echo "$FILTER_B_DATE" | sed -e's/-//g' -e 's/ //g' -e 's/://g')
+				shift 2
+			fi
+			;;
+		-ip) 
+			if [ -z "$2" ] || [ ! $FILTER_IP -eq 0 ]; then
+				error_message "You need second argument in -ip IPADD or you use argument twice!"
+			else 
+				FILTER_IP=1; FILTER_IP_ADRESS="$2"
+				shift 2
+			fi
+			;;
+		-uri)
+			if [ -z "$2" ] || [ ! $FILTER_URI -eq 0 ]; then
+				error_message "You need second argument in -uri URI or you use argument twice!"
+			else 
+				FILTER_URI=1; FILTER_URI_ADRESS="$2"
+				shift 2
+			fi
+			;;
+		list-ip|list-hosts|list-uri|hist-ip|hist-load)
+			PRIKAZ="$1";
+			shift
+			break
+			;;
+		*)
+			break
+			;;
+	esac
+done
+
+
+
+if [ $# -eq 0 ]; then
+	filters
+else {
+	for file in "$@"; do
+		if [ ! -r "$file" ]; then
+			error_message "Subor \"$file\" neexistuje!"
+		fi
+		case "$file" in
+			*.gz) 
+				gunzip -c "$file"
+				;;
+			*)
+				cat "$file"
+				;; 
+		esac
+	done
+	} | filters
+fi 
